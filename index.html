@@ -1,0 +1,789 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Lead Routing — Live Demo</title>
+<style>
+  :root {
+    --bg: #f4f6f9;
+    --panel: #ffffff;
+    --ink: #1a2230;
+    --muted: #69748a;
+    --line: #e3e8ef;
+    --brand: #1f6feb;
+    --brand-dark: #1656c0;
+    --green: #1f9d63;
+    --amber: #c98a00;
+    --red: #d2402f;
+    --prequal: #6c4ad6;
+    --shadow: 0 1px 2px rgba(16,24,40,.06), 0 1px 3px rgba(16,24,40,.08);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    padding: 18px 24px;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+  .header-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+  .title h1 {
+    font-size: 19px;
+    margin: 0;
+    letter-spacing: -.01em;
+  }
+  .title p {
+    margin: 3px 0 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .btn-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  button {
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    border: 1px solid var(--line);
+    background: #fff;
+    color: var(--ink);
+    padding: 8px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: background .12s, border-color .12s, transform .05s;
+  }
+  button:hover { background: #f7f9fc; }
+  button:active { transform: translateY(1px); }
+  button.primary {
+    background: var(--brand);
+    border-color: var(--brand);
+    color: #fff;
+  }
+  button.primary:hover { background: var(--brand-dark); }
+  button.ghost-danger { color: var(--red); }
+  button.ghost-danger:hover { background: #fdf1ef; border-color: #f3c9c2; }
+
+  .presets {
+    margin-top: 14px;
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .presets .lbl {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    font-weight: 700;
+    margin-right: 4px;
+  }
+  button.preset {
+    background: #f0f4fa;
+    border-color: #dfe7f2;
+    font-size: 12.5px;
+  }
+  button.preset:hover { background: #e6edf7; }
+
+  /* ---------- Layout ---------- */
+  .stage {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 18px;
+    padding: 20px 24px 40px;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    .stage { grid-template-columns: 1fr; }
+  }
+
+  /* ---------- Board ---------- */
+  .board {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 12px;
+  }
+  @media (max-width: 1100px) { .board { grid-template-columns: repeat(2, 1fr); } }
+  @media (max-width: 560px)  { .board { grid-template-columns: 1fr; } }
+
+  .col {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    min-height: 220px;
+    overflow: hidden;
+  }
+  .col.prequal { border-color: #d9cef5; }
+  .col-head {
+    padding: 12px 12px 10px;
+    border-bottom: 1px solid var(--line);
+    border-top: 3px solid var(--accent, var(--brand));
+  }
+  .col.prequal .col-head { --accent: var(--prequal); }
+  .col-name {
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .count-pill {
+    font-size: 12px;
+    font-weight: 700;
+    background: #eef2f8;
+    color: var(--muted);
+    border-radius: 20px;
+    padding: 2px 9px;
+    min-width: 24px;
+    text-align: center;
+  }
+  .licensed {
+    margin-top: 6px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 18px;
+  }
+  .chip {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: .03em;
+    background: #eef2f8;
+    color: #51607a;
+    border-radius: 5px;
+    padding: 2px 6px;
+  }
+  .catch-all {
+    font-size: 12px;
+    color: var(--prequal);
+    font-weight: 600;
+    margin-top: 6px;
+  }
+  .pause-toggle {
+    margin-top: 10px;
+    width: 100%;
+    padding: 6px;
+    font-size: 12px;
+    border-radius: 7px;
+  }
+  .pause-toggle.paused {
+    background: var(--amber);
+    border-color: var(--amber);
+    color: #fff;
+  }
+
+  .cards {
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+  }
+  .empty-hint {
+    color: #aab3c2;
+    font-size: 12px;
+    text-align: center;
+    padding: 18px 6px;
+    font-style: italic;
+  }
+
+  .card {
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent, var(--brand));
+    border-radius: 8px;
+    padding: 9px 10px;
+    background: #fff;
+    animation: pop .22s ease;
+  }
+  .col.prequal .card { --accent: var(--prequal); }
+  @keyframes pop {
+    from { opacity: 0; transform: translateY(-6px) scale(.98); }
+    to   { opacity: 1; transform: none; }
+  }
+  .card-name { font-size: 13px; font-weight: 700; }
+  .card-meta {
+    margin-top: 4px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+  }
+  .tag {
+    font-size: 11px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 5px;
+    background: #f1f4f9;
+    color: #51607a;
+  }
+  .tag.state { background: #e7f0fe; color: #1656c0; }
+  .tag.bad   { background: #fdecea; color: var(--red); }
+
+  /* ---------- Paused column styling ---------- */
+  .col.paused { background: #f6f7f9; }
+  .col.paused .col-head { filter: grayscale(1); opacity: .65; }
+  .col.paused .cards { opacity: .55; }
+  .col.paused .col-name::after {
+    content: "PAUSED";
+    font-size: 9.5px;
+    letter-spacing: .08em;
+    background: var(--amber);
+    color: #fff;
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  /* ---------- Log ---------- */
+  .log-panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    position: sticky;
+    top: 150px;
+    display: flex;
+    flex-direction: column;
+    max-height: calc(100vh - 180px);
+  }
+  .log-head {
+    padding: 13px 16px;
+    border-bottom: 1px solid var(--line);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .log-head h2 { font-size: 14px; margin: 0; }
+  .log-head .sub { font-size: 11.5px; color: var(--muted); }
+  .log-body {
+    overflow-y: auto;
+    padding: 8px 8px 12px;
+    flex: 1;
+  }
+  .log-line {
+    font-size: 12.5px;
+    line-height: 1.45;
+    padding: 8px 10px;
+    border-radius: 8px;
+    margin-top: 6px;
+    border-left: 3px solid var(--accent, var(--line));
+    background: #fafbfd;
+    animation: pop .22s ease;
+  }
+  .log-line .who { font-weight: 700; }
+  .log-line .arrow { color: var(--muted); margin: 0 4px; }
+  .log-line .dest { font-weight: 700; }
+  .log-line .reason { color: var(--muted); }
+  .log-line.r-prequal { --accent: var(--prequal); }
+  .log-line.r-prequal .dest { color: var(--prequal); }
+  .log-line.r-officer { --accent: var(--green); }
+  .log-line.r-officer .dest { color: var(--green); }
+  .log-empty {
+    color: #aab3c2;
+    font-size: 12.5px;
+    text-align: center;
+    padding: 24px 12px;
+    font-style: italic;
+  }
+
+  /* ---------- Rules reference ---------- */
+  .rules {
+    margin: 0 24px 30px;
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 14px 18px;
+    box-shadow: var(--shadow);
+  }
+  .rules h3 { margin: 0 0 8px; font-size: 13px; }
+  .rules ol { margin: 0; padding-left: 20px; }
+  .rules li { font-size: 12.5px; color: #44506a; margin: 3px 0; }
+  .rules code {
+    background: #eef2f8; padding: 1px 5px; border-radius: 4px;
+    font-size: 11.5px; color: #2b3550;
+  }
+
+  /* ---------- Instructions modal ---------- */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(18, 26, 40, .55);
+    backdrop-filter: blur(2px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 50;
+    animation: fade .18s ease;
+  }
+  .overlay[hidden] { display: none; }
+  @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: #fff;
+    border-radius: 16px;
+    max-width: 640px;
+    width: 100%;
+    max-height: 88vh;
+    overflow-y: auto;
+    box-shadow: 0 24px 60px rgba(16,24,40,.28);
+    animation: rise .22s ease;
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+  .modal-head {
+    padding: 22px 26px 16px;
+    border-bottom: 1px solid var(--line);
+    background: linear-gradient(135deg, #1f6feb, #6c4ad6);
+    color: #fff;
+    border-radius: 16px 16px 0 0;
+  }
+  .modal-head .greeting { font-size: 12px; opacity: .85; font-weight: 600; letter-spacing: .03em; }
+  .modal-head h2 { margin: 4px 0 0; font-size: 21px; letter-spacing: -.01em; }
+  .modal-head p { margin: 8px 0 0; font-size: 13.5px; opacity: .92; line-height: 1.5; }
+  .modal-body { padding: 20px 26px 8px; }
+  .modal-body h3 {
+    font-size: 12px; text-transform: uppercase; letter-spacing: .06em;
+    color: var(--muted); margin: 18px 0 8px;
+  }
+  .modal-body h3:first-child { margin-top: 0; }
+  .step-list { margin: 0; padding: 0; list-style: none; counter-reset: step; }
+  .step-list li {
+    position: relative;
+    padding: 8px 0 8px 38px;
+    font-size: 13.5px;
+    line-height: 1.5;
+    color: #36415a;
+    border-bottom: 1px solid #f0f3f8;
+  }
+  .step-list li:last-child { border-bottom: none; }
+  .step-list li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 0; top: 7px;
+    width: 24px; height: 24px;
+    background: #eef2f8; color: var(--brand);
+    border-radius: 50%;
+    font-size: 12px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .step-list li strong { color: var(--ink); }
+  .step-list code {
+    background: #eef2f8; padding: 1px 5px; border-radius: 4px;
+    font-size: 11.5px; color: #2b3550;
+  }
+  .use-list { margin: 0; padding-left: 18px; }
+  .use-list li { font-size: 13.5px; line-height: 1.55; color: #36415a; margin: 5px 0; }
+  .use-list b { color: var(--ink); }
+  .modal-foot {
+    padding: 14px 26px 22px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(to top, #fff 70%, rgba(255,255,255,0));
+  }
+  .modal-foot button.primary { padding: 9px 20px; }
+</style>
+</head>
+<body>
+
+<!-- ============ INSTRUCTIONS MODAL ============ -->
+<div class="overlay" id="overlay">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <div class="greeting">Hi Bryan Harrison —</div>
+      <h2 id="modalTitle">How our lead-routing engine works</h2>
+      <p>This is a live, interactive demo of how an incoming mortgage lead gets matched to the right
+         loan officer (LO 1–4) or sent to the Prequal Team. Generate a lead and the engine decides
+         where it goes — and tells you exactly why.</p>
+    </div>
+    <div class="modal-body">
+      <h3>The rules (checked in this exact order)</h3>
+      <ol class="step-list">
+        <li><strong>Disqualifiers go to Prequal.</strong> If a lead's credit is under 580 <em>or</em>
+            assets are under $5,000, it skips the officers entirely and goes to the Prequal Team.</li>
+        <li><strong>Match the license.</strong> We keep only the officers licensed in the lead's state.
+            Each LO covers specific states (shown under their name).</li>
+        <li><strong>Skip anyone paused.</strong> A paused officer is removed from consideration for new leads.</li>
+        <li><strong>Round robin the rest.</strong> When two officers both qualify (e.g. GA and FL each
+            have two), leads alternate evenly between them so nobody gets overloaded.</li>
+        <li><strong>No match? Prequal.</strong> If no licensed, available officer remains, the lead
+            falls back to the Prequal Team.</li>
+      </ol>
+
+      <h3>How to drive the demo</h3>
+      <ul class="use-list">
+        <li><b>Generate Random Lead</b> — fires a random lead through the engine. Watch the card land
+            and read the log line.</li>
+        <li><b>Scenario presets</b> — each button forces one specific path: a sub-580 lead, a low-assets
+            lead, a GA lead (click it a few times to see round robin alternate LO 1 ↔ LO 2), and an
+            unlicensed-state lead that falls back to Prequal.</li>
+        <li><b>Pause / Resume</b> — pause an officer and the next leads route around them. Cards already
+            assigned stay put.</li>
+        <li><b>Routing Log</b> (right side) — one plain-English line per lead explaining <i>why</i> it
+            routed where it did.</li>
+        <li><b>Reset Demo</b> — clears everything to start fresh.</li>
+      </ul>
+    </div>
+    <div class="modal-foot">
+      <button class="primary" id="startBtn">Got it — start the demo</button>
+    </div>
+  </div>
+</div>
+
+<header>
+  <div class="header-top">
+    <div class="title">
+      <h1>Mortgage Lead Routing — Live Demo</h1>
+      <p>Watch each lead flow through the rules in real time. Pause officers, fire presets, and read the "why" in the log.</p>
+    </div>
+    <div class="btn-row">
+      <button id="helpBtn">How it works</button>
+      <button class="primary" id="genBtn">+ Generate Random Lead</button>
+      <button class="ghost-danger" id="resetBtn">Reset Demo</button>
+    </div>
+  </div>
+  <div class="presets">
+    <span class="lbl">Scenario presets</span>
+    <button class="preset" data-preset="sub580">Sub-580 Lead</button>
+    <button class="preset" data-preset="lowassets">Low-Assets Lead</button>
+    <button class="preset" data-preset="garr">GA Lead (Round Robin)</button>
+    <button class="preset" data-preset="unlicensed">Unlicensed-State Lead</button>
+  </div>
+</header>
+
+<div class="stage">
+  <div class="board" id="board"></div>
+
+  <aside class="log-panel">
+    <div class="log-head">
+      <div>
+        <h2>Routing Log</h2>
+        <div class="sub">Plain-English reason per lead</div>
+      </div>
+      <span class="count-pill" id="logCount">0</span>
+    </div>
+    <div class="log-body" id="log">
+      <div class="log-empty">No leads yet. Generate one to begin.</div>
+    </div>
+  </aside>
+</div>
+
+<div class="rules">
+  <h3>Routing logic (applied in this exact order)</h3>
+  <ol>
+    <li><strong>Disqualifiers →</strong> Prequal Team if <code>credit &lt; 580</code> OR <code>assets &lt; $5,000</code>.</li>
+    <li><strong>State licensing</strong> — keep only officers licensed in the lead's state.</li>
+    <li><strong>Drop paused</strong> officers from the eligible pool.</li>
+    <li><strong>Round robin</strong> among whoever's left — rotation is tracked <em>per eligible group</em> so counts stay balanced.</li>
+    <li><strong>Fallback →</strong> Prequal Team if no eligible officer remains.</li>
+  </ol>
+</div>
+
+<script>
+"use strict";
+
+/* ----------------------------------------------------------------
+   SEED DATA
+-----------------------------------------------------------------*/
+const SEED_OFFICERS = [
+  { id: "lo1", name: "LO 1", states: ["GA", "FL", "TN"] },
+  { id: "lo2", name: "LO 2", states: ["GA", "SC", "NC"] },
+  { id: "lo3", name: "LO 3", states: ["TX", "OK"] },
+  { id: "lo4", name: "LO 4", states: ["FL", "AL"] },
+];
+const PREQUAL_ID = "prequal";
+
+/* Mutable runtime state -----------------------------------------*/
+let officers = [];          // working copy of officers (+paused flag, +count, +cards)
+let prequal  = null;        // the catch-all team
+let rotation = {};          // groupKey -> next index pointer  (per-eligible-group round robin)
+let logEntries = [];        // for the routing log
+
+/* ----------------------------------------------------------------
+   RANDOM LEAD GENERATION
+-----------------------------------------------------------------*/
+const FIRST = ["Jordan","Alex","Sam","Lee","Taylor","Morgan","Casey","Riley","Jamie","Drew","Quinn","Avery","Cameron","Peyton","Reese","Skyler","Devon","Harper","Rowan","Emerson"];
+const LAST  = ["M.","P.","R.","K.","T.","B.","S.","L.","D.","H.","N.","W.","C.","G.","V."];
+// States chosen to exercise every path: licensed (1 or 2 officers) + unlicensed (CA/NY/OH).
+const STATE_POOL = ["GA","GA","FL","FL","TN","SC","NC","TX","OK","AL","CA","NY","OH"];
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function randomLead() {
+  return {
+    name: pick(FIRST) + " " + pick(LAST),
+    state: pick(STATE_POOL),
+    credit: 560 + Math.floor(Math.random() * 260),     // 560 – 819
+    assets: Math.floor(Math.random() * 120000),         // $0 – $120k
+  };
+}
+
+/* ----------------------------------------------------------------
+   THE ROUTING ENGINE  — the heart of the demo
+   Returns { destId, reason }
+-----------------------------------------------------------------*/
+function routeLead(lead) {
+  // RULE 1 — Disqualifiers route straight to Prequal.
+  if (lead.credit < 580) {
+    return { destId: PREQUAL_ID, reason: "credit below 580" };
+  }
+  if (lead.assets < 5000) {
+    return { destId: PREQUAL_ID, reason: "assets below $5,000" };
+  }
+
+  // RULE 2 — State licensing (hard filter).
+  const licensed = officers.filter(o => o.states.includes(lead.state));
+  if (licensed.length === 0) {
+    return { destId: PREQUAL_ID, reason: "no officer licensed in " + lead.state };
+  }
+
+  // RULE 3 — Drop paused officers.
+  const eligible = licensed.filter(o => !o.paused);
+  const pausedInState = licensed.filter(o => o.paused);
+
+  // RULE 5 (early) — everyone licensed here is paused → fallback.
+  if (eligible.length === 0) {
+    const names = pausedInState.map(o => o.name).join(" and ");
+    return {
+      destId: PREQUAL_ID,
+      reason: "all officers licensed in " + lead.state + " are paused (" + names + ")",
+    };
+  }
+
+  // RULE 4 — Round robin, tracked PER ELIGIBLE GROUP.
+  // The group key is the sorted set of eligible officer ids, so each distinct
+  // pool of eligible officers keeps its own independent rotation pointer.
+  const groupKey = eligible.map(o => o.id).sort().join("|");
+  const ptr = rotation[groupKey] || 0;
+  const chosen = eligible[ptr % eligible.length];
+  rotation[groupKey] = (ptr + 1) % eligible.length;
+
+  // Build an explainable reason.
+  let reason;
+  if (eligible.length > 1) {
+    reason = "licensed in " + lead.state + ", next in rotation";
+  } else if (pausedInState.length > 0) {
+    const names = pausedInState.map(o => o.name).join(" and ");
+    const verb = pausedInState.length > 1 ? "are" : "is";
+    reason = names + " " + verb + " paused";
+  } else {
+    reason = "only officer licensed in " + lead.state;
+  }
+
+  return { destId: chosen.id, reason };
+}
+
+/* ----------------------------------------------------------------
+   APPLY A LEAD  (route it, drop the card, log it)
+-----------------------------------------------------------------*/
+function dispatch(lead) {
+  const { destId, reason } = routeLead(lead);
+  const dest = destId === PREQUAL_ID ? prequal : officers.find(o => o.id === destId);
+
+  dest.cards.push(lead);
+  logEntries.unshift({
+    lead,
+    destName: dest.name,
+    reason,
+    toPrequal: destId === PREQUAL_ID,
+  });
+
+  renderColumn(dest);
+  renderLog();
+}
+
+/* ----------------------------------------------------------------
+   RENDERING
+-----------------------------------------------------------------*/
+function money(n) {
+  if (n >= 1000) return "$" + Math.round(n / 1000) + "k";
+  return "$" + n;
+}
+
+function creditClass(c) { return c < 580 ? "tag bad" : "tag"; }
+function assetClass(a)  { return a < 5000 ? "tag bad" : "tag"; }
+
+function cardHTML(lead) {
+  return `
+    <div class="card">
+      <div class="card-name">${lead.name}</div>
+      <div class="card-meta">
+        <span class="tag state">${lead.state}</span>
+        <span class="${creditClass(lead.credit)}">${lead.credit}</span>
+        <span class="${assetClass(lead.assets)}">${money(lead.assets)}</span>
+      </div>
+    </div>`;
+}
+
+function renderColumn(unit) {
+  const el = document.getElementById("col-" + unit.id);
+  if (!el) return;
+
+  el.classList.toggle("paused", !!unit.paused);
+
+  const countEl = el.querySelector(".count-pill");
+  countEl.textContent = unit.cards.length;
+
+  const cardsEl = el.querySelector(".cards");
+  if (unit.cards.length === 0) {
+    cardsEl.innerHTML = `<div class="empty-hint">No leads yet</div>`;
+  } else {
+    cardsEl.innerHTML = unit.cards.map(cardHTML).join("");
+  }
+
+  const toggle = el.querySelector(".pause-toggle");
+  if (toggle) {
+    toggle.textContent = unit.paused ? "Resume" : "Pause";
+    toggle.classList.toggle("paused", !!unit.paused);
+  }
+}
+
+function buildBoard() {
+  const board = document.getElementById("board");
+  board.innerHTML = "";
+
+  officers.forEach(o => {
+    const col = document.createElement("div");
+    col.className = "col";
+    col.id = "col-" + o.id;
+    col.innerHTML = `
+      <div class="col-head">
+        <div class="col-name">${o.name} <span class="count-pill">0</span></div>
+        <div class="licensed">
+          ${o.states.map(s => `<span class="chip">${s}</span>`).join("")}
+        </div>
+        <button class="pause-toggle" data-officer="${o.id}">Pause</button>
+      </div>
+      <div class="cards"><div class="empty-hint">No leads yet</div></div>`;
+    board.appendChild(col);
+  });
+
+  // Prequal column (catch-all, no pause)
+  const pcol = document.createElement("div");
+  pcol.className = "col prequal";
+  pcol.id = "col-" + prequal.id;
+  pcol.innerHTML = `
+    <div class="col-head">
+      <div class="col-name">${prequal.name} <span class="count-pill">0</span></div>
+      <div class="catch-all">Catch-all · all states</div>
+    </div>
+    <div class="cards"><div class="empty-hint">No leads yet</div></div>`;
+  document.getElementById("board").appendChild(pcol);
+
+  // Wire pause toggles
+  board.querySelectorAll(".pause-toggle").forEach(btn => {
+    btn.addEventListener("click", () => togglePause(btn.dataset.officer));
+  });
+}
+
+function renderLog() {
+  const logEl = document.getElementById("log");
+  document.getElementById("logCount").textContent = logEntries.length;
+
+  if (logEntries.length === 0) {
+    logEl.innerHTML = `<div class="log-empty">No leads yet. Generate one to begin.</div>`;
+    return;
+  }
+
+  logEl.innerHTML = logEntries.map(e => {
+    const l = e.lead;
+    const cls = e.toPrequal ? "r-prequal" : "r-officer";
+    const summary = `${l.state}, ${l.credit}, ${money(l.assets)}`;
+    return `
+      <div class="log-line ${cls}">
+        <span class="who">${l.name}</span>
+        <span class="reason">(${summary})</span>
+        <span class="arrow">→</span>
+        <span class="dest">${e.destName}</span>
+        <span class="reason">— ${e.reason}</span>
+      </div>`;
+  }).join("");
+}
+
+/* ----------------------------------------------------------------
+   ACTIONS
+-----------------------------------------------------------------*/
+function togglePause(officerId) {
+  const o = officers.find(x => x.id === officerId);
+  if (!o) return;
+  o.paused = !o.paused;
+  // NOTE: pausing only affects NEW leads. Already-routed cards stay put,
+  // and rotation pointers are intentionally left alone — when the eligible
+  // pool changes, a different group key is used, so balance is preserved.
+  renderColumn(o);
+}
+
+function init() {
+  officers = SEED_OFFICERS.map(o => ({ ...o, states: [...o.states], paused: false, cards: [] }));
+  prequal  = { id: PREQUAL_ID, name: "Prequal Team", cards: [] };
+  rotation = {};
+  logEntries = [];
+  buildBoard();
+  renderLog();
+}
+
+function resetDemo() { init(); }
+
+/* ----------------------------------------------------------------
+   PRESETS  — each hard-coded to hit one routing path
+-----------------------------------------------------------------*/
+function runPreset(kind) {
+  let lead;
+  switch (kind) {
+    case "sub580":     // Rule 1 — disqualified on credit
+      lead = { name: pick(FIRST) + " " + pick(LAST), state: "GA", credit: 540 + Math.floor(Math.random()*39), assets: 30000 };
+      break;
+    case "lowassets":  // Rule 1 — disqualified on assets
+      lead = { name: pick(FIRST) + " " + pick(LAST), state: "FL", credit: 700, assets: Math.floor(Math.random()*4000) };
+      break;
+    case "garr":       // Rule 4 — GA has 2 officers → alternates Sarah/Marcus
+      lead = { name: pick(FIRST) + " " + pick(LAST), state: "GA", credit: 720, assets: 40000 };
+      break;
+    case "unlicensed": // Rule 5 — no officer licensed → Prequal
+      lead = { name: pick(FIRST) + " " + pick(LAST), state: "CA", credit: 700, assets: 25000 };
+      break;
+  }
+  dispatch(lead);
+}
+
+/* ----------------------------------------------------------------
+   WIRE UP
+-----------------------------------------------------------------*/
+// Instructions modal
+const overlay = document.getElementById("overlay");
+function openHelp()  { overlay.hidden = false; }
+function closeHelp() { overlay.hidden = true; }
+document.getElementById("helpBtn").addEventListener("click", openHelp);
+document.getElementById("startBtn").addEventListener("click", closeHelp);
+overlay.addEventListener("click", (e) => { if (e.target === overlay) closeHelp(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeHelp(); });
+
+document.getElementById("genBtn").addEventListener("click", () => dispatch(randomLead()));
+document.getElementById("resetBtn").addEventListener("click", resetDemo);
+document.querySelectorAll(".preset").forEach(btn => {
+  btn.addEventListener("click", () => runPreset(btn.dataset.preset));
+});
+
+init();
+</script>
+</body>
+</html>

@@ -156,13 +156,32 @@
     min-width: 24px;
     text-align: center;
   }
+  .col-title {
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 600;
+    margin-top: 3px;
+  }
+  .licensed-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+    font-weight: 700;
+    margin-top: 9px;
+  }
   .licensed {
-    margin-top: 6px;
+    margin-top: 5px;
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
     min-height: 18px;
+    max-height: 58px;
+    overflow-y: auto;
+    padding-right: 2px;
   }
+  .licensed::-webkit-scrollbar { width: 6px; }
+  .licensed::-webkit-scrollbar-thumb { background: #d3dae4; border-radius: 3px; }
   .chip {
     font-size: 10.5px;
     font-weight: 700;
@@ -411,9 +430,10 @@
     <div class="modal-head">
       <div class="greeting">Hi Bryan Harrison —</div>
       <h2 id="modalTitle">How our lead-routing engine works</h2>
-      <p>This is a live, interactive demo of how an incoming mortgage lead gets matched to the right
-         loan officer (LO 1–4) or sent to the Prequal Team. Generate a lead and the engine decides
-         where it goes — and tells you exactly why.</p>
+      <p>This is a live, interactive demo of how an incoming mortgage lead gets matched to one of our
+         licensed loan officers — or sent to the Prequal Team. Generate a lead and the engine decides
+         where it goes, and tells you exactly why. The officers, NMLS numbers, and state licensing
+         shown here are real.</p>
     </div>
     <div class="modal-body">
       <h3>The rules (checked in this exact order)</h3>
@@ -423,8 +443,8 @@
         <li><strong>Match the license.</strong> We keep only the officers licensed in the lead's state.
             Each LO covers specific states (shown under their name).</li>
         <li><strong>Skip anyone paused.</strong> A paused officer is removed from consideration for new leads.</li>
-        <li><strong>Round robin the rest.</strong> When two officers both qualify (e.g. GA and FL each
-            have two), leads alternate evenly between them so nobody gets overloaded.</li>
+        <li><strong>Round robin the rest.</strong> When several officers qualify for the same state
+            (e.g. GA is covered by three of them), leads alternate evenly so nobody gets overloaded.</li>
         <li><strong>No match? Prequal.</strong> If no licensed, available officer remains, the lead
             falls back to the Prequal Team.</li>
       </ol>
@@ -434,8 +454,8 @@
         <li><b>Generate Random Lead</b> — fires a random lead through the engine. Watch the card land
             and read the log line.</li>
         <li><b>Scenario presets</b> — each button forces one specific path: a sub-580 lead, a low-assets
-            lead, a GA lead (click it a few times to see round robin alternate LO 1 ↔ LO 2), and an
-            unlicensed-state lead that falls back to Prequal.</li>
+            lead, a GA lead (click it a few times to watch round robin cycle through the GA-licensed
+            officers), and a New York lead — a state none of these officers cover — that falls back to Prequal.</li>
         <li><b>Pause / Resume</b> — pause an officer and the next leads route around them. Cards already
             assigned stay put.</li>
         <li><b>Routing Log</b> (right side) — one plain-English line per lead explaining <i>why</i> it
@@ -505,10 +525,14 @@
    SEED DATA
 -----------------------------------------------------------------*/
 const SEED_OFFICERS = [
-  { id: "lo1", name: "LO 1", states: ["GA", "FL", "TN"] },
-  { id: "lo2", name: "LO 2", states: ["GA", "SC", "NC"] },
-  { id: "lo3", name: "LO 3", states: ["TX", "OK"] },
-  { id: "lo4", name: "LO 4", states: ["FL", "AL"] },
+  { id: "alix", name: "Alix Gardner", title: "Loan Originator", nmls: "1415709",
+    states: ["CA","CO","DE","FL","MD","TX","VA"] },
+  { id: "jeff", name: "Jeff Corsiatto", title: "Branch Manager", nmls: "36990",
+    states: ["AL","AR","CT","GA","IA","IL","KS","LA","MD","ME","MN","MO","NC","NE","NJ","NV","OH","PA","SC","SD","TX","VA","WA","WV"] },
+  { id: "bryan", name: "Bryan Charles Harrison", title: "Division President", nmls: "115385",
+    states: ["AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","HI","IA","ID","IL","IN","KS","KY","LA","MA","MD","ME","MI","MN","MO","MS","MT","NC","ND","NE","NH","NJ","NM","NV","OH","OK","OR","PA","RI","SC","SD","TN","TX","VA","VT","WA","WI","WV","WY"] },
+  { id: "anthony", name: "Anthony Pacifico", title: "Mortgage Loan Originator", nmls: "1604812",
+    states: ["AK","AL","AR","AZ","CA","CT","DC","FL","GA","IL","IN","KY","LA","MA","MD","MI","MN","MS","MT","NC","NH","NJ","NV","OH","OR","PA","TN","TX","VA","WA"] },
 ];
 const PREQUAL_ID = "prequal";
 
@@ -523,8 +547,9 @@ let logEntries = [];        // for the routing log
 -----------------------------------------------------------------*/
 const FIRST = ["Jordan","Alex","Sam","Lee","Taylor","Morgan","Casey","Riley","Jamie","Drew","Quinn","Avery","Cameron","Peyton","Reese","Skyler","Devon","Harper","Rowan","Emerson"];
 const LAST  = ["M.","P.","R.","K.","T.","B.","S.","L.","D.","H.","N.","W.","C.","G.","V."];
-// States chosen to exercise every path: licensed (1 or 2 officers) + unlicensed (CA/NY/OH).
-const STATE_POOL = ["GA","GA","FL","FL","TN","SC","NC","TX","OK","AL","CA","NY","OH"];
+// States chosen to exercise every path: multi-officer (round robin), single-officer,
+// and unlicensed (NY/UT — no officer covers these, so they fall back to Prequal).
+const STATE_POOL = ["GA","FL","TX","MD","VA","CO","TN","DE","SC","OK","WY","NY","UT"];
 
 function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
@@ -668,6 +693,8 @@ function buildBoard() {
     col.innerHTML = `
       <div class="col-head">
         <div class="col-name">${o.name} <span class="count-pill">0</span></div>
+        <div class="col-title">${o.title} · NMLS# ${o.nmls}</div>
+        <div class="licensed-label">Licensed in ${o.states.length} states</div>
         <div class="licensed">
           ${o.states.map(s => `<span class="chip">${s}</span>`).join("")}
         </div>
@@ -755,11 +782,11 @@ function runPreset(kind) {
     case "lowassets":  // Rule 1 — disqualified on assets
       lead = { name: pick(FIRST) + " " + pick(LAST), state: "FL", credit: 700, assets: Math.floor(Math.random()*4000) };
       break;
-    case "garr":       // Rule 4 — GA has 2 officers → alternates Sarah/Marcus
+    case "garr":       // Rule 4 — GA has 3 officers (Jeff, Bryan, Anthony) → cycles through them
       lead = { name: pick(FIRST) + " " + pick(LAST), state: "GA", credit: 720, assets: 40000 };
       break;
-    case "unlicensed": // Rule 5 — no officer licensed → Prequal
-      lead = { name: pick(FIRST) + " " + pick(LAST), state: "CA", credit: 700, assets: 25000 };
+    case "unlicensed": // Rule 5 — NY has no licensed officer → Prequal
+      lead = { name: pick(FIRST) + " " + pick(LAST), state: "NY", credit: 700, assets: 25000 };
       break;
   }
   dispatch(lead);

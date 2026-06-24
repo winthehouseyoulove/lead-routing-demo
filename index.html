@@ -196,6 +196,12 @@
     transition: background .1s, color .1s;
   }
   .chip:hover { background: #dfe7f2; }
+  .chip.backup {
+    background: transparent;
+    color: #8a93a3;
+    box-shadow: inset 0 0 0 1px #d4dae3;
+  }
+  .chip.backup:hover { background: #f1f4f9; }
   .chip.state-paused {
     background: #fde8e4;
     color: #c0392b;
@@ -220,6 +226,29 @@
     border-color: var(--amber);
     color: #fff;
   }
+  .tier-toggle {
+    margin-top: 6px;
+    width: 100%;
+    padding: 5px;
+    font-size: 11px;
+    border-radius: 7px;
+    color: var(--muted);
+    background: #f7f9fc;
+  }
+  .tier-toggle:hover { background: #eef2f8; }
+  .fallback-badge {
+    display: inline-block;
+    margin-top: 7px;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    background: var(--prequal);
+    color: #fff;
+    padding: 2px 7px;
+    border-radius: 4px;
+  }
+  .col.fallback .col-head { --accent: var(--prequal); }
 
   .cards {
     padding: 10px;
@@ -453,8 +482,12 @@
         <li><strong>Match the license.</strong> We keep only the officers licensed in the lead's state.
             Each LO covers specific states (shown under their name).</li>
         <li><strong>Skip anyone paused.</strong> A paused officer is removed from consideration for new leads.</li>
-        <li><strong>Round robin the rest.</strong> When several officers qualify for the same state
-            (e.g. GA is covered by three of them), leads alternate evenly so nobody gets overloaded.</li>
+        <li><strong>Primary officers first.</strong> Some officers are <em>fallback / overflow</em>
+            (e.g. Bryan, who's licensed almost everywhere). A fallback officer only receives a lead when
+            <em>no primary officer is available</em> in that state — so they don't vacuum up volume that
+            should go to the local LOs. They still fully own any state no primary covers.</li>
+        <li><strong>Round robin the rest.</strong> When several officers qualify in the same tier
+            (e.g. GA is covered by two primaries), leads alternate evenly so nobody gets overloaded.</li>
         <li><strong>No match? Prequal.</strong> If no licensed, available officer remains, the lead
             falls back to the Prequal Team.</li>
       </ol>
@@ -469,6 +502,8 @@
         <li><b>Pause / Resume</b> — pause a whole officer and the next leads route around them.</li>
         <li><b>Pause a single state</b> — click any state chip under an officer to pause just that state
             (it turns red and strikes through). They keep taking leads everywhere else. Click again to resume.</li>
+        <li><b>Make fallback / Make primary</b> — flip any officer between tiers. Watch a fallback
+            officer's chips: solid = states they actively own, outlined = states they only back up.</li>
         <li><b>Already-assigned cards stay put</b> — pausing only affects new leads.</li>
         <li><b>Routing Log</b> (right side) — one plain-English line per lead explaining <i>why</i> it
             routed where it did.</li>
@@ -525,7 +560,8 @@
     <li><strong>Disqualifiers →</strong> Prequal Team if <code>credit &lt; 580</code> OR <code>assets &lt; $5,000</code>.</li>
     <li><strong>State licensing</strong> — keep only officers licensed in the lead's state.</li>
     <li><strong>Drop paused</strong> officers from the eligible pool — whether paused entirely or just for the lead's state.</li>
-    <li><strong>Round robin</strong> among whoever's left — rotation is tracked <em>per eligible group</em> so counts stay balanced.</li>
+    <li><strong>Primary before fallback</strong> — overflow officers (e.g. Bryan) are used only when no primary LO is available in that state.</li>
+    <li><strong>Round robin</strong> among whoever's left in the active tier — rotation is tracked <em>per eligible group</em> so counts stay balanced.</li>
     <li><strong>Fallback →</strong> Prequal Team if no eligible officer remains.</li>
   </ol>
 </div>
@@ -541,7 +577,7 @@ const SEED_OFFICERS = [
     states: ["CA","CO","DE","FL","MD","TX","VA"] },
   { id: "jeff", name: "Jeff Corsiatto", title: "Branch Manager", nmls: "36990",
     states: ["AL","AR","CT","GA","IA","IL","KS","LA","MD","ME","MN","MO","NC","NE","NJ","NV","OH","PA","SC","SD","TX","VA","WA","WV"] },
-  { id: "bryan", name: "Bryan Charles Harrison", title: "Division President", nmls: "115385",
+  { id: "bryan", name: "Bryan Charles Harrison", title: "Division President", nmls: "115385", fallback: true,
     states: ["AK","AL","AR","AZ","CA","CO","CT","DC","DE","FL","GA","HI","IA","ID","IL","IN","KS","KY","LA","MA","MD","ME","MI","MN","MO","MS","MT","NC","ND","NE","NH","NJ","NM","NV","OH","OK","OR","PA","RI","SC","SD","TN","TX","VA","VT","WA","WI","WV","WY"] },
   { id: "anthony", name: "Anthony Pacifico", title: "Mortgage Loan Originator", nmls: "1604812",
     states: ["AK","AL","AR","AZ","CA","CT","DC","FL","GA","IL","IN","KY","LA","MA","MD","MI","MN","MS","MT","NC","NH","NJ","NV","OH","OR","PA","TN","TX","VA","WA"] },
@@ -608,24 +644,42 @@ function routeLead(lead) {
     };
   }
 
-  // RULE 4 — Round robin, tracked PER ELIGIBLE GROUP.
-  // The group key is the sorted set of eligible officer ids, so each distinct
-  // pool of eligible officers keeps its own independent rotation pointer.
-  const groupKey = eligible.map(o => o.id).sort().join("|");
+  // RULE 4 — Tier preference. PRIMARY officers are tried first. FALLBACK / overflow
+  // officers (e.g. a manager licensed almost everywhere) only receive a lead when no
+  // primary officer is available in that state — otherwise they'd vacuum up every lead.
+  const primaries = eligible.filter(o => !o.fallback);
+  const usingFallback = primaries.length === 0;
+  const pool = usingFallback ? eligible : primaries;
+
+  // Round robin WITHIN the chosen tier, tracked per eligible group.
+  // The group key is the sorted set of pool officer ids, so each distinct
+  // pool keeps its own independent rotation pointer.
+  const groupKey = pool.map(o => o.id).sort().join("|");
   const ptr = rotation[groupKey] || 0;
-  const chosen = eligible[ptr % eligible.length];
-  rotation[groupKey] = (ptr + 1) % eligible.length;
+  const chosen = pool[ptr % pool.length];
+  rotation[groupKey] = (ptr + 1) % pool.length;
 
   // Build an explainable reason.
+  const nameList = (arr) => arr.map(o => o.name).join(" and ");
   let reason;
-  if (eligible.length > 1) {
+  if (usingFallback) {
+    const licensedPrimaries = licensed.filter(o => !o.fallback);
+    if (licensedPrimaries.length === 0) {
+      reason = "fallback — no primary LO licensed in " + lead.state;
+    } else {
+      reason = "fallback — every primary LO in " + lead.state + " is paused (" + nameList(licensedPrimaries) + ")";
+    }
+    if (pool.length > 1) reason += ", next in rotation";
+  } else if (pool.length > 1) {
     reason = "licensed in " + lead.state + ", next in rotation";
-  } else if (pausedInState.length > 0) {
-    const names = pausedInState.map(o => o.name).join(" and ");
-    const verb = pausedInState.length > 1 ? "are" : "is";
-    reason = names + " " + verb + " paused";
   } else {
-    reason = "only officer licensed in " + lead.state;
+    const pausedPrimaries = licensed.filter(o => !o.fallback && isPausedFor(o));
+    if (pausedPrimaries.length > 0) {
+      const verb = pausedPrimaries.length > 1 ? "are" : "is";
+      reason = nameList(pausedPrimaries) + " " + verb + " paused";
+    } else {
+      reason = "only officer licensed in " + lead.state;
+    }
   }
 
   return { destId: chosen.id, reason };
@@ -696,23 +750,53 @@ function renderColumn(unit) {
   }
 }
 
+// Set of every state covered by at least one PRIMARY (non-fallback) officer.
+// A fallback officer's chip is "backup-only" if a primary also covers that state.
+function primaryStateSet() {
+  const s = new Set();
+  officers.forEach(o => { if (!o.fallback) o.states.forEach(st => s.add(st)); });
+  return s;
+}
+
+function baseLabel(o, prim) {
+  if (o.fallback) {
+    const own = o.states.filter(s => !prim.has(s)).length;   // states only Bryan covers
+    return `Primary in ${own} · backup in ${o.states.length - own}`;
+  }
+  return `Licensed in ${o.states.length} states`;
+}
+
 function buildBoard() {
   const board = document.getElementById("board");
   board.innerHTML = "";
+  const prim = primaryStateSet();
 
   officers.forEach(o => {
     const col = document.createElement("div");
-    col.className = "col";
+    col.className = "col" + (o.fallback ? " fallback" : "") + (o.paused ? " paused" : "");
     col.id = "col-" + o.id;
+    const badge = o.fallback
+      ? `<span class="fallback-badge">Fallback · overflow</span>` : "";
+    const pausedSuffix = o.pausedStates.length ? ` · ${o.pausedStates.length} paused` : "";
     col.innerHTML = `
       <div class="col-head">
         <div class="col-name">${o.name} <span class="count-pill">0</span></div>
         <div class="col-title">${o.title} · NMLS# ${o.nmls}</div>
-        <div class="licensed-label">Licensed in ${o.states.length} states</div>
+        ${badge}
+        <div class="licensed-label${o.pausedStates.length ? ' has-paused' : ''}">${baseLabel(o, prim)}${pausedSuffix}</div>
         <div class="licensed">
-          ${o.states.map(s => `<span class="chip" data-state="${s}" title="Click to pause ${o.name} in ${s}">${s}</span>`).join("")}
+          ${o.states.map(s => {
+            const isBackup = o.fallback && prim.has(s);
+            const isPaused = o.pausedStates.includes(s);
+            const cls = "chip" + (isBackup ? " backup" : "") + (isPaused ? " state-paused" : "");
+            const tip = isBackup
+              ? `${o.name} backs up ${s} (only if no primary LO is free). Click to pause.`
+              : `Click to pause ${o.name} in ${s}`;
+            return `<span class="${cls}" data-state="${s}" title="${tip}">${s}</span>`;
+          }).join("")}
         </div>
-        <button class="pause-toggle" data-officer="${o.id}">Pause</button>
+        <button class="pause-toggle" data-officer="${o.id}">${o.paused ? "Resume" : "Pause"}</button>
+        <button class="tier-toggle" data-officer="${o.id}">${o.fallback ? "Make primary" : "Make fallback"}</button>
       </div>
       <div class="cards"><div class="empty-hint">No leads yet</div></div>`;
     board.appendChild(col);
@@ -730,10 +814,21 @@ function buildBoard() {
     <div class="cards"><div class="empty-hint">No leads yet</div></div>`;
   document.getElementById("board").appendChild(pcol);
 
-  // Wire pause toggles
+  // Wire pause + tier toggles
   board.querySelectorAll(".pause-toggle").forEach(btn => {
     btn.addEventListener("click", () => togglePause(btn.dataset.officer));
   });
+  board.querySelectorAll(".tier-toggle").forEach(btn => {
+    btn.addEventListener("click", () => toggleTier(btn.dataset.officer));
+  });
+}
+
+// Rebuild the whole board from current state (used after a tier change), then
+// repaint each column's cards/counts so nothing already routed is lost.
+function renderBoard() {
+  buildBoard();
+  officers.forEach(renderColumn);
+  renderColumn(prequal);
 }
 
 function renderLog() {
@@ -784,14 +879,20 @@ function toggleStatePause(officerId, state, chipEl) {
   updateLicensedLabel(o);
 }
 
+// Flip an officer between primary and fallback (overflow) tiers.
+function toggleTier(officerId) {
+  const o = officers.find(x => x.id === officerId);
+  if (!o) return;
+  o.fallback = !o.fallback;
+  renderBoard();   // backup-chip styling + labels depend on the tier mix, so rebuild
+}
+
 function updateLicensedLabel(o) {
   const col = document.getElementById("col-" + o.id);
   if (!col) return;
   const label = col.querySelector(".licensed-label");
   const p = o.pausedStates.length;
-  label.textContent = p
-    ? `Licensed in ${o.states.length} states · ${p} paused`
-    : `Licensed in ${o.states.length} states`;
+  label.textContent = baseLabel(o, primaryStateSet()) + (p ? ` · ${p} paused` : "");
   label.classList.toggle("has-paused", p > 0);
 }
 

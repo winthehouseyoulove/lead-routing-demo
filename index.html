@@ -170,6 +170,7 @@
     font-weight: 700;
     margin-top: 9px;
   }
+  .licensed-label.has-paused { color: var(--red); }
   .licensed {
     margin-top: 5px;
     display: flex;
@@ -190,7 +191,17 @@
     color: #51607a;
     border-radius: 5px;
     padding: 2px 6px;
+    cursor: pointer;
+    user-select: none;
+    transition: background .1s, color .1s;
   }
+  .chip:hover { background: #dfe7f2; }
+  .chip.state-paused {
+    background: #fde8e4;
+    color: #c0392b;
+    text-decoration: line-through;
+  }
+  .chip.state-paused:hover { background: #f9d8d1; }
   .catch-all {
     font-size: 12px;
     color: var(--prequal);
@@ -428,7 +439,6 @@
 <div class="overlay" id="overlay">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
     <div class="modal-head">
-      <div class="greeting">Hi Bryan Harrison —</div>
       <h2 id="modalTitle">How our lead-routing engine works</h2>
       <p>This is a live, interactive demo of how an incoming mortgage lead gets matched to one of our
          licensed loan officers — or sent to the Prequal Team. Generate a lead and the engine decides
@@ -456,8 +466,10 @@
         <li><b>Scenario presets</b> — each button forces one specific path: a sub-580 lead, a low-assets
             lead, a GA lead (click it a few times to watch round robin cycle through the GA-licensed
             officers), and a New York lead — a state none of these officers cover — that falls back to Prequal.</li>
-        <li><b>Pause / Resume</b> — pause an officer and the next leads route around them. Cards already
-            assigned stay put.</li>
+        <li><b>Pause / Resume</b> — pause a whole officer and the next leads route around them.</li>
+        <li><b>Pause a single state</b> — click any state chip under an officer to pause just that state
+            (it turns red and strikes through). They keep taking leads everywhere else. Click again to resume.</li>
+        <li><b>Already-assigned cards stay put</b> — pausing only affects new leads.</li>
         <li><b>Routing Log</b> (right side) — one plain-English line per lead explaining <i>why</i> it
             routed where it did.</li>
         <li><b>Reset Demo</b> — clears everything to start fresh.</li>
@@ -512,7 +524,7 @@
   <ol>
     <li><strong>Disqualifiers →</strong> Prequal Team if <code>credit &lt; 580</code> OR <code>assets &lt; $5,000</code>.</li>
     <li><strong>State licensing</strong> — keep only officers licensed in the lead's state.</li>
-    <li><strong>Drop paused</strong> officers from the eligible pool.</li>
+    <li><strong>Drop paused</strong> officers from the eligible pool — whether paused entirely or just for the lead's state.</li>
     <li><strong>Round robin</strong> among whoever's left — rotation is tracked <em>per eligible group</em> so counts stay balanced.</li>
     <li><strong>Fallback →</strong> Prequal Team if no eligible officer remains.</li>
   </ol>
@@ -581,9 +593,11 @@ function routeLead(lead) {
     return { destId: PREQUAL_ID, reason: "no officer licensed in " + lead.state };
   }
 
-  // RULE 3 — Drop paused officers.
-  const eligible = licensed.filter(o => !o.paused);
-  const pausedInState = licensed.filter(o => o.paused);
+  // RULE 3 — Drop paused officers. An officer is unavailable for this lead if they're
+  // paused entirely (whole-officer Pause) OR paused for this specific state.
+  const isPausedFor = (o) => o.paused || o.pausedStates.includes(lead.state);
+  const eligible = licensed.filter(o => !isPausedFor(o));
+  const pausedInState = licensed.filter(isPausedFor);
 
   // RULE 5 (early) — everyone licensed here is paused → fallback.
   if (eligible.length === 0) {
@@ -624,7 +638,7 @@ function dispatch(lead) {
   const { destId, reason } = routeLead(lead);
   const dest = destId === PREQUAL_ID ? prequal : officers.find(o => o.id === destId);
 
-  dest.cards.push(lead);
+  dest.cards.unshift(lead);   // newest lead on top of the column
   logEntries.unshift({
     lead,
     destName: dest.name,
@@ -696,7 +710,7 @@ function buildBoard() {
         <div class="col-title">${o.title} · NMLS# ${o.nmls}</div>
         <div class="licensed-label">Licensed in ${o.states.length} states</div>
         <div class="licensed">
-          ${o.states.map(s => `<span class="chip">${s}</span>`).join("")}
+          ${o.states.map(s => `<span class="chip" data-state="${s}" title="Click to pause ${o.name} in ${s}">${s}</span>`).join("")}
         </div>
         <button class="pause-toggle" data-officer="${o.id}">Pause</button>
       </div>
@@ -759,8 +773,30 @@ function togglePause(officerId) {
   renderColumn(o);
 }
 
+// Pause/resume a single state for one officer (clicking a state chip).
+function toggleStatePause(officerId, state, chipEl) {
+  const o = officers.find(x => x.id === officerId);
+  if (!o) return;
+  const i = o.pausedStates.indexOf(state);
+  if (i >= 0) o.pausedStates.splice(i, 1);
+  else o.pausedStates.push(state);
+  if (chipEl) chipEl.classList.toggle("state-paused");
+  updateLicensedLabel(o);
+}
+
+function updateLicensedLabel(o) {
+  const col = document.getElementById("col-" + o.id);
+  if (!col) return;
+  const label = col.querySelector(".licensed-label");
+  const p = o.pausedStates.length;
+  label.textContent = p
+    ? `Licensed in ${o.states.length} states · ${p} paused`
+    : `Licensed in ${o.states.length} states`;
+  label.classList.toggle("has-paused", p > 0);
+}
+
 function init() {
-  officers = SEED_OFFICERS.map(o => ({ ...o, states: [...o.states], paused: false, cards: [] }));
+  officers = SEED_OFFICERS.map(o => ({ ...o, states: [...o.states], paused: false, pausedStates: [], cards: [] }));
   prequal  = { id: PREQUAL_ID, name: "Prequal Team", cards: [] };
   rotation = {};
   logEntries = [];
@@ -808,6 +844,15 @@ document.getElementById("genBtn").addEventListener("click", () => dispatch(rando
 document.getElementById("resetBtn").addEventListener("click", resetDemo);
 document.querySelectorAll(".preset").forEach(btn => {
   btn.addEventListener("click", () => runPreset(btn.dataset.preset));
+});
+
+// Click a state chip to pause/resume that one state for that officer (delegated,
+// bound once — the board's innerHTML is rebuilt on reset but #board itself persists).
+document.getElementById("board").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip[data-state]");
+  if (!chip) return;
+  const col = chip.closest(".col");
+  toggleStatePause(col.id.replace("col-", ""), chip.dataset.state, chip);
 });
 
 init();
